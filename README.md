@@ -35,5 +35,5 @@ note: feel free to reach out if you wanna use our code. we can even give ya earl
 
 ---
 # V1 (deprecated)
-shipyard - same
-SB721allinone - similar to SBII721 but worse lol
+- shipyard - same
+- SB721allinone - similar to SBII721 but worse lol
