@@ -1,0 +1,2 @@
+# Speedboat-core
+core contract
