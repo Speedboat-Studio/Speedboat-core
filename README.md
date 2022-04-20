@@ -33,4 +33,7 @@ to support us:
 
 note: feel free to reach out if you wanna use our code. we can even give ya early access to our experimental repo. or tailer made something for you.
 
-
+---
+# V1 (deprecated)
+shipyard - same
+SB721allinone - similar to SBII721 but worse lol
