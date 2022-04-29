@@ -150,6 +150,14 @@ contract SpeedBoat721AllInOne is
         return super.isApprovedForAll(_owner, operator);
     }
 
+    function airdrop(address[] calldata wallet) public {
+        require(msg.sender == owner());
+        for (uint256 i = 0; i < wallet.length; i++) {
+            _safeMint(_msgSender(), nextID);
+            nextID = nextID + 1;
+        }
+    }
+
     // @dev just to show who's the boss!
     function owner() public view virtual returns (address) {
         return beneficiary;

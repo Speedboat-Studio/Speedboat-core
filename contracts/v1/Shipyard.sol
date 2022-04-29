@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts-upgradeable/proxy/ClonesUpgradeable.sol";
-import "contracts/v1/SpeedBoat721AllInOne.sol";
+import "./SpeedBoat721AllInOne.sol";
 
 contract Shipyard {
     event NewShip(

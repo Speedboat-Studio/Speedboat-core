@@ -8,6 +8,8 @@ pragma solidity 0.8.13;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 import "@openzeppelin/contracts-upgradeable/access/AccessControlEnumerableUpgradeable.sol";
@@ -20,15 +22,16 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./ISBMintable.sol";
+import "./ISBRandomness.sol";
 import "./ISBShipable.sol";
-import "./ERC721ASBUpgradable.sol";
 import "./paymentUtil.sol";
 
-// @dev speedboat v2 erc721A = modified SBII721A
-// @dev should treat this code as experimental.
-contract SBII721A is
+// @dev speedboat v2 erc721 = SBII721
+contract SBII721 is
     Initializable,
-    ERC721ASBUpgradable,
+    ContextUpgradeable,
+    ERC721Upgradeable,
+    ERC721EnumerableUpgradeable,
     ReentrancyGuardUpgradeable,
     AccessControlEnumerableUpgradeable,
     ISBMintable,
@@ -39,7 +42,7 @@ contract SBII721A is
     using SafeERC20 for IERC20;
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    string public constant MODEL = "SBII-721A-EARLYACCESS";
+    string public constant MODEL = "SBII-721-test";
 
     struct Round {
         uint128 price;
@@ -64,7 +67,7 @@ contract SBII721A is
     }
 
     Conf public config;
-    string[] public roundNames;
+    string[] roundNames;
 
     mapping(bytes32 => EnumerableSetUpgradeable.AddressSet) private walletList;
     mapping(bytes32 => bytes32) private merkleRoot;
@@ -78,8 +81,10 @@ contract SBII721A is
     uint256 private bip;
     address public beneficiary;
 
+    ISBRandomness public randomness;
+
     function listRole()
-        public
+        external
         pure
         returns (string[] memory names, bytes32[] memory code)
     {
@@ -114,7 +119,6 @@ contract SBII721A is
         beneficiary = _beneficiary;
     }
 
-    // 0 = unlimited, can only set once.
     function setMaxSupply(uint64 _maxSupply)
         public
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -141,7 +145,10 @@ contract SBII721A is
         view
         returns (uint256[] memory tokenList)
     {
-        return tokensOfOwner(wallet);
+        tokenList = new uint256[](balanceOf(wallet));
+        for (uint256 i = 0; i < balanceOf(wallet); i++) {
+            tokenList[i] = tokenOfOwnerByIndex(wallet, i);
+        }
     }
 
     function listRounds() public view returns (string[] memory) {
@@ -162,7 +169,7 @@ contract SBII721A is
         require(config.allowPrivilege, "disabled feature");
         require(hasRole(MINTER_ROLE, msg.sender), "require permission");
         for (uint256 i = 0; i < wallets.length; i++) {
-            mintNext(wallets[i], amount[i]);
+            _mintNext(wallets[i], amount[i]);
         }
     }
 
@@ -176,11 +183,20 @@ contract SBII721A is
         if (config.maxSupply != 0) {
             require(totalSupply() + amount <= config.maxSupply);
         }
-        _mint(reciever, amount); // 721A mint
+        if (!config.randomAccessMode) {
+            for (uint256 i = 0; i < amount; i++) {
+                _mint(reciever, totalSupply() + 1);
+            }
+        } else {
+            for (uint256 i = 0; i < amount; i++) {
+                _mint(reciever, _random(msg.sender, i));
+            }
+        }
     }
 
     function _random(address ad, uint256 num) internal returns (uint256) {
-        revert("not supported by 721a la");
+        return
+            uint256(randomness.getRand(keccak256(abi.encodePacked(ad, num))));
     }
 
     function updateURI(string memory newURI)
@@ -193,7 +209,18 @@ contract SBII721A is
     }
 
     function mintTarget(address reciever, uint256 target) public override {
-        revert("not supported by 721a la");
+        require(config.allowPrivilege, "disabled feature");
+        require(hasRole(MINTER_ROLE, msg.sender), "require permission");
+        _mintTarget(reciever, target);
+    }
+
+    function _mintTarget(address reciever, uint256 target) internal {
+        require(config.allowTarget, "disabled feature");
+        require(config.randomAccessMode, "disabled feature");
+        if (config.maxSupply != 0) {
+            require(totalSupply() + 1 <= config.maxSupply);
+        }
+        _mint(reciever, target);
     }
 
     function requestMint(Round storage thisRound, uint256 amount) internal {
@@ -257,6 +284,7 @@ contract SBII721A is
         bytes32[] memory proof
     ) public payable {
         bytes32 key = keccak256(abi.encodePacked(roundName));
+
         Round storage thisRound = roundData[key];
 
         requestMint(thisRound, amount);
@@ -284,11 +312,15 @@ contract SBII721A is
             require(wallet == msg.sender, "nope");
         }
 
-        require(amount > 0, "pick one"); // such a lazy check lol
-        require(tokenID == 0, "nope"); // such a lazy check lol
+        require(amount * tokenID == 0, "pick one"); // such a lazy check lol
 
-        paymentUtil.processPayment(denominatedAsset, pricePerUnit * amount);
-        _mintNext(wallet, amount);
+        if (amount > 0) {
+            paymentUtil.processPayment(denominatedAsset, pricePerUnit * amount);
+            _mintNext(wallet, amount);
+        } else {
+            paymentUtil.processPayment(denominatedAsset, pricePerUnit);
+            _mintTarget(wallet, tokenID);
+        }
     }
 
     function mint(
@@ -310,6 +342,7 @@ contract SBII721A is
             address(this),
             block.chainid
         );
+
         require(config.allowLazySell, "not available");
         require(config.allowPrivilege, "not available");
 
@@ -320,11 +353,15 @@ contract SBII721A is
             require(wallet == msg.sender, "nope");
         }
 
-        require(amount > 0, "pick one"); // such a lazy check lol
-        require(tokenID == 0, "nope"); // such a lazy check lol
+        require(amount * tokenID == 0, "pick one"); // such a lazy check lol
 
-        paymentUtil.processPayment(denominatedAsset, pricePerUnit * amount);
-        _mintNext(wallet, amount);
+        if (amount > 0) {
+            paymentUtil.processPayment(denominatedAsset, pricePerUnit * amount);
+            _mintNext(wallet, amount);
+        } else {
+            paymentUtil.processPayment(denominatedAsset, pricePerUnit);
+            _mintTarget(wallet, tokenID);
+        }
     }
 
     /// magic overload end
@@ -578,7 +615,7 @@ contract SBII721A is
                 )
             );
 
-        __721AInit(name, symbol);
+        __721Init(name, symbol);
         _setupRole(DEFAULT_ADMIN_ROLE, owner);
         _setupRole(MINTER_ROLE, owner);
 
@@ -634,6 +671,14 @@ contract SBII721A is
         }
     }
 
+    function setRandomness(address _randomness)
+        public
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        // require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "admin only");
+        randomness = ISBRandomness(_randomness);
+    }
+
     function contractURI() external view returns (string memory) {
         string memory baseURI = _baseURI();
         return string(abi.encodePacked(baseURI, "contract_uri"));
@@ -654,9 +699,12 @@ contract SBII721A is
 
     // @dev boring section -------------------
 
-    function __721AInit(string memory name, string memory symbol) internal {
+    function __721Init(string memory name, string memory symbol) internal {
+        __Context_init_unchained();
+        __ERC165_init_unchained();
         __ReentrancyGuard_init_unchained();
-        __ERC721A_init(name, symbol);
+        __ERC721_init_unchained(name, symbol);
+        __ERC721Enumerable_init_unchained();
         __AccessControlEnumerable_init_unchained();
     }
 
@@ -664,16 +712,29 @@ contract SBII721A is
         return _baseTokenURI;
     }
 
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    )
+        internal
+        virtual
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable)
+    {
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
+
     function supportsInterface(bytes4 interfaceId)
         public
         view
         virtual
-        override(AccessControlEnumerableUpgradeable, ERC721ASBUpgradable)
+        override(
+            ERC721Upgradeable,
+            ERC721EnumerableUpgradeable,
+            AccessControlEnumerableUpgradeable
+        )
         returns (bool)
     {
-        return
-            interfaceId == type(IERC721Upgradeable).interfaceId ||
-            interfaceId == type(IERC721MetadataUpgradeable).interfaceId ||
-            super.supportsInterface(interfaceId);
+        return super.supportsInterface(interfaceId);
     }
 }
