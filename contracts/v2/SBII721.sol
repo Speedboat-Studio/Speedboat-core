@@ -43,6 +43,7 @@ contract SBII721 is
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     string public constant MODEL = "SBII-721-test";
+    uint256 private lastID;
 
     struct Round {
         uint128 price;
@@ -166,7 +167,7 @@ contract SBII721 is
     function massMint(address[] calldata wallets, uint256[] calldata amount)
         public
     {
-        require(config.allowPrivilege, "disabled feature");
+        require(config.allowPrivilege, "df");
         require(hasRole(MINTER_ROLE, msg.sender), "require permission");
         for (uint256 i = 0; i < wallets.length; i++) {
             _mintNext(wallets[i], amount[i]);
@@ -174,7 +175,7 @@ contract SBII721 is
     }
 
     function mintNext(address reciever, uint256 amount) public override {
-        require(config.allowPrivilege, "disabled feature");
+        require(config.allowPrivilege, "df");
         require(hasRole(MINTER_ROLE, msg.sender), "require permission");
         _mintNext(reciever, amount);
     }
@@ -185,8 +186,10 @@ contract SBII721 is
         }
         if (!config.randomAccessMode) {
             for (uint256 i = 0; i < amount; i++) {
-                _mint(reciever, totalSupply() + 1);
+                _mint(reciever, lastID + 1 +i);
             }
+            lastID += amount;
+
         } else {
             for (uint256 i = 0; i < amount; i++) {
                 _mint(reciever, _random(msg.sender, i));
@@ -209,14 +212,14 @@ contract SBII721 is
     }
 
     function mintTarget(address reciever, uint256 target) public override {
-        require(config.allowPrivilege, "disabled feature");
+        require(config.allowPrivilege, "df");
         require(hasRole(MINTER_ROLE, msg.sender), "require permission");
         _mintTarget(reciever, target);
     }
 
     function _mintTarget(address reciever, uint256 target) internal {
-        require(config.allowTarget, "disabled feature");
-        require(config.randomAccessMode, "disabled feature");
+        require(config.allowTarget, "df");
+        require(config.randomAccessMode, "df");
         if (config.maxSupply != 0) {
             require(totalSupply() + 1 <= config.maxSupply);
         }
@@ -552,7 +555,7 @@ contract SBII721 is
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         // require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "admin only");
-        require(config.allowPrivilege, "disabled feature");
+        require(config.allowPrivilege, "df");
 
         for (uint256 i = 0; i < nonces.length; i++) {
             nonceUsed[nonces[i]] = true;
@@ -564,7 +567,7 @@ contract SBII721 is
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         // require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "admin only");
-        require(config.allowPrivilege, "disabled feature");
+        require(config.allowPrivilege, "df");
 
         for (uint256 i = 0; i < nonces.length; i++) {
             nonceUsed[nonces[i]] = false;

@@ -176,7 +176,7 @@ contract SBII721A is
         if (config.maxSupply != 0) {
             require(totalSupply() + amount <= config.maxSupply);
         }
-        _mint(reciever, amount); // 721A mint
+        _safeMint(reciever, amount); // 721A mint
     }
 
     function _random(address ad, uint256 num) internal returns (uint256) {
